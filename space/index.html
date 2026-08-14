@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parallax — How We Measure the Universe</title>
+<meta name="description" content="A scroll journey up the cosmic distance ladder, from Earth's orbit to the edge of the observable universe.">
+<meta name="color-scheme" content="dark">
+<style>
+/* ============================================================
+   TOKENS
+   Hue carries meaning here: ice blue = near, ember = far.
+   The page tints from one to the other as you descend.
+   ============================================================ */
+:root{
+  --void:   #05070e;
+  --dust:   #1b2436;
+  --star:   #ede6d8;
+  --muted:  #8b93a5;
+  --amber:  #f0a03c;
+  --ice:    #7fa7c4;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", Georgia, serif;
+
+  --rail-w: 8.5rem;
+  --gutter: clamp(1.25rem, 4vw, 4rem);
+  --depth: 0;               /* 0 = near/blue, 1 = far/ember. Set by scroll. */
+  --measure: 34rem;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--void);
+  color:var(--star);
+  font-family:var(--serif);
+  font-size:clamp(1rem, 0.94rem + 0.3vw, 1.125rem);
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--amber); color:var(--void)}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--amber); outline-offset:3px; border-radius:2px}
+
+/* ============================================================
+   AMBIENT SKY — canvas starfield + colour wash, both fixed
+   ============================================================ */
+.sky{position:fixed; inset:0; z-index:0; pointer-events:none}
+.sky-canvas{position:fixed; inset:0; width:100%; height:100%; z-index:1; pointer-events:none}
+.wash{position:fixed; inset:0; z-index:0; pointer-events:none}
+.wash-near{
+  background:
+    radial-gradient(58vw 58vh at 14% 78%, rgba(127,167,196,.16), transparent 68%),
+    radial-gradient(46vw 46vh at 84% 22%, rgba(127,167,196,.09), transparent 70%);
+  opacity:calc(1 - var(--depth));
+}
+.wash-far{
+  background:
+    radial-gradient(64vw 64vh at 80% 26%, rgba(196,85,46,.20), transparent 68%),
+    radial-gradient(52vw 52vh at 16% 74%, rgba(120,40,60,.14), transparent 72%);
+  opacity:var(--depth);
+}
+.vignette{
+  position:fixed; inset:0; z-index:2; pointer-events:none;
+  background:radial-gradient(120vw 100vh at 50% 45%, transparent 42%, rgba(3,4,9,.72) 100%);
+}
+
+/* ============================================================
+   HEADER — hairline bar, live light-travel readout
+   ============================================================ */
+.topbar{
+  position:fixed; top:0; left:0; right:0; z-index:40;
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.85rem var(--gutter);
+  background:linear-gradient(to bottom, rgba(5,7,14,.92), rgba(5,7,14,.55) 70%, transparent);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.wordmark{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.34em;
+  text-transform:uppercase; color:var(--star); text-decoration:none;
+}
+.wordmark b{font-weight:400; color:var(--amber)}
+.readout{
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--muted); text-align:right;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.readout-val{color:var(--amber); font-variant-numeric:tabular-nums}
+.progress{
+  position:fixed; top:0; left:0; z-index:41; height:1px; width:100%;
+  transform-origin:0 50%; transform:scaleX(0);
+  background:linear-gradient(to right, var(--ice), var(--amber));
+}
+
+/* ============================================================
+   RAIL — the ladder itself, one rung per measured distance
+   ============================================================ */
+.rail{
+  position:fixed; left:var(--gutter); top:50%; transform:translateY(-50%);
+  z-index:30; width:var(--rail-w);
+  display:flex; flex-direction:column; gap:.1rem;
+  border-left:1px solid var(--dust); padding-left:.9rem;
+}
+.rung-link{
+  display:block; padding:.42rem 0; text-decoration:none; position:relative;
+  font-family:var(--mono); font-size:.6rem; letter-spacing:.16em;
+  text-transform:uppercase; color:#5c6478;
+  transition:color .35s ease;
+}
+.rung-link::before{
+  content:""; position:absolute; left:-1.22rem; top:50%;
+  width:.62rem; height:1px; background:currentColor;
+  transform:translateY(-50%) scaleX(.45); transform-origin:0 50%;
+  transition:transform .35s ease;
+}
+.rung-link:hover{color:var(--star)}
+.rung-link.is-active{color:var(--amber)}
+.rung-link.is-active::before{transform:translateY(-50%) scaleX(1)}
+.rung-link span{display:block; font-size:.55rem; letter-spacing:.1em; color:#454c5e}
+.rung-link.is-active span{color:var(--muted)}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.page{position:relative; z-index:10}
+.rung{
+  min-height:100vh;
+  min-height:100svh;
+  display:flex; align-items:center;
+  padding:7.5rem var(--gutter) 5rem;
+  padding-left:calc(var(--gutter) + var(--rail-w) + 3.5rem);
+}
+.rung-inner{width:100%; max-width:72rem; margin:0 auto}
+.copy{max-width:var(--measure)}
+
+/* Text blocks -------------------------------------------------- */
+.eyebrow{
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.3em;
+  text-transform:uppercase; color:var(--amber); margin:0 0 1.6rem;
+  display:flex; align-items:center; gap:.75rem;
+}
+.eyebrow::after{content:""; flex:1; height:1px; background:linear-gradient(to right, var(--dust), transparent); max-width:9rem}
+.figure{
+  font-size:clamp(3rem, 1.4rem + 7vw, 7.5rem);
+  line-height:.92; letter-spacing:-.035em; font-weight:400;
+  margin:0 0 .75rem; font-variant-numeric:lining-nums tabular-nums;
+  color:var(--star);
+}
+.figure em{font-style:normal; color:var(--amber)}
+.figure .unit{font-size:.32em; letter-spacing:.02em}
+.figure-long{font-size:clamp(2.5rem, 1rem + 5.2vw, 5.4rem)}
+.figure-unit{
+  font-family:var(--mono); font-size:clamp(.7rem,.6rem + .3vw,.85rem);
+  letter-spacing:.24em; text-transform:uppercase; color:var(--muted);
+  margin:0 0 2rem;
+}
+.lede{font-size:1.12em; margin:0 0 1.1rem}
+.body{color:#b9bfcd; margin:0 0 1.1rem}
+.body strong{color:var(--star); font-weight:600}
+.note{
+  font-family:var(--mono); font-size:.68rem; line-height:1.75;
+  letter-spacing:.04em; color:#6f7789; border-left:1px solid var(--dust);
+  padding-left:.9rem; margin-top:2.2rem; max-width:26rem;
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero{padding-top:8.5rem}
+.hero-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:clamp(2rem,5vw,5rem); align-items:center}
+.title{
+  font-size:clamp(3.2rem, 1rem + 9.5vw, 9rem);
+  line-height:.9; letter-spacing:-.045em; font-weight:400;
+  margin:0 0 1.4rem;
+}
+.hero-sub{color:#c3c9d6; max-width:30rem; margin:0 0 1.6rem}
+.scroll-cue{
+  display:inline-flex; align-items:center; gap:.7rem; text-decoration:none;
+  font-family:var(--mono); font-size:.64rem; letter-spacing:.26em;
+  text-transform:uppercase; color:var(--muted); padding:.5rem 0;
+}
+.scroll-cue:hover{color:var(--amber)}
+.scroll-cue i{
+  width:2.4rem; height:1px; background:currentColor; display:block;
+  transform-origin:0 50%; animation:reach 2.8s ease-in-out infinite;
+}
+@keyframes reach{0%,100%{transform:scaleX(.5)}50%{transform:scaleX(1)}}
+
+/* ============================================================
+   INSTRUMENT — the signature element
+   ============================================================ */
+.instrument{
+  border:1px solid var(--dust); background:rgba(8,11,20,.55);
+  backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+  padding:1.1rem 1.1rem 1rem; touch-action:pan-y;
+}
+.instrument-head{
+  display:flex; justify-content:space-between; gap:1rem; align-items:baseline;
+  font-family:var(--mono); font-size:.6rem; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--muted);
+  border-bottom:1px solid var(--dust); padding-bottom:.7rem; margin-bottom:.9rem;
+}
+.instrument-head b{color:var(--star); font-weight:400}
+.panels{display:grid; grid-template-columns:1.35fr 1fr; gap:1rem; align-items:stretch}
+.panel{display:flex; flex-direction:column; gap:.55rem}
+.panel svg{display:block; width:100%; height:auto; margin:auto 0}
+.panel-tag{
+  margin:0;
+  font-family:var(--mono); font-size:.52rem; letter-spacing:.2em;
+  text-transform:uppercase; color:#5c6478;
+}
+
+/* Instrument control ------------------------------------------- */
+.control{margin-top:1rem}
+.control-labels{
+  display:flex; justify-content:space-between;
+  font-family:var(--mono); font-size:.55rem; letter-spacing:.2em;
+  text-transform:uppercase; color:#5c6478; margin-bottom:.4rem;
+}
+.control-labels b{color:var(--amber); font-weight:400}
+.slider{
+  -webkit-appearance:none; appearance:none; width:100%; height:1.4rem;
+  background:transparent; cursor:ew-resize; display:block; margin:0;
+}
+.slider::-webkit-slider-runnable-track{height:1px; background:var(--dust)}
+.slider::-moz-range-track{height:1px; background:var(--dust)}
+.slider::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none;
+  width:.55rem; height:.55rem; border-radius:50%; background:var(--amber);
+  margin-top:-.26rem; border:none;
+}
+.slider::-moz-range-thumb{
+  width:.55rem; height:.55rem; border-radius:50%; background:var(--amber); border:none;
+}
+
+/* Instrument readouts ------------------------------------------ */
+.dials{
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.1rem;
+  margin-top:1rem; border-top:1px solid var(--dust); padding-top:.85rem;
+}
+.dial-k{
+  font-family:var(--mono); font-size:.52rem; letter-spacing:.18em;
+  text-transform:uppercase; color:#5c6478; margin:0 0 .3rem;
+}
+.dial-v{
+  font-family:var(--mono); font-size:.86rem; letter-spacing:.02em;
+  color:var(--star); margin:0; font-variant-numeric:tabular-nums;
+}
+.dial-v.is-live{color:var(--amber)}
+
+/* ============================================================
+   PER-SECTION DIAGRAMS
+   ============================================================ */
+.plate{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.85fr); gap:clamp(2rem,5vw,4.5rem); align-items:center}
+.plate-figure{position:relative}
+.plate-figure svg{display:block; width:100%; height:auto; overflow:visible}
+.caption{
+  font-family:var(--mono); font-size:.55rem; letter-spacing:.18em;
+  text-transform:uppercase; color:#5c6478; margin:.9rem 0 0; text-align:right;
+}
+
+/* Spectrum (redshift) ------------------------------------------- */
+.spectrum{position:relative; height:6rem; border:1px solid var(--dust); overflow:hidden}
+.spectrum-band{
+  position:absolute; inset:0;
+  background:linear-gradient(to right,#3b2a6b,#2b58a8,#2f8f7a,#c9b23c,#c4552e,#7a1f1f);
+  opacity:.5;
+}
+.spectrum-line{
+  position:absolute; top:0; bottom:0; width:2px; background:var(--void);
+  will-change:transform;
+}
+.spectrum-scale{
+  display:flex; justify-content:space-between; margin-top:.5rem;
+  font-family:var(--mono); font-size:.55rem; letter-spacing:.18em;
+  text-transform:uppercase; color:#5c6478;
+}
+
+/* ============================================================
+   CODA
+   ============================================================ */
+.coda{text-align:center; justify-content:center}
+.coda .copy{max-width:38rem; margin:0 auto}
+.coda .eyebrow{justify-content:center}
+.coda .eyebrow::after{display:none}
+.back{
+  display:inline-block; margin-top:2.5rem; padding:.85rem 1.6rem;
+  border:1px solid var(--dust); text-decoration:none;
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.26em;
+  text-transform:uppercase; color:var(--star);
+  transition:border-color .3s ease, color .3s ease;
+}
+.back:hover{border-color:var(--amber); color:var(--amber)}
+.colophon{
+  position:relative; z-index:10;
+  border-top:1px solid var(--dust); margin:0 var(--gutter);
+  padding:2.2rem 0 3rem;
+  display:flex; flex-wrap:wrap; gap:1.4rem 3rem; justify-content:space-between;
+  font-family:var(--mono); font-size:.58rem; line-height:1.9;
+  letter-spacing:.14em; text-transform:uppercase; color:#5c6478;
+}
+.colophon h2{font-size:inherit; letter-spacing:.24em; color:var(--muted); margin:0 0 .5rem; font-weight:400}
+.colophon ul{list-style:none; margin:0; padding:0}
+
+/* ============================================================
+   MOTION
+   ============================================================ */
+.reveal{opacity:0; transform:translateY(22px); transition:opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1)}
+.reveal.is-in{opacity:1; transform:none}
+.reveal-d1{transition-delay:.09s}
+.reveal-d2{transition-delay:.18s}
+.reveal-d3{transition-delay:.27s}
+.drift{will-change:transform}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:1080px){
+  .rail{display:none}
+  .rung{padding-left:var(--gutter); padding-right:var(--gutter)}
+}
+@media (max-width:860px){
+  :root{--measure:100%}
+  .hero-grid,.plate{grid-template-columns:minmax(0,1fr); gap:2.5rem}
+  .plate-figure{order:-1}
+  .rung{padding-top:6.5rem; padding-bottom:4rem; min-height:auto}
+  .hero{min-height:100svh; padding-top:7.5rem}
+  .panels{grid-template-columns:minmax(0,1fr)}
+  .caption{text-align:left}
+  .readout{font-size:.58rem; letter-spacing:.14em}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1; transform:none; transition:none}
+  .scroll-cue i{animation:none; transform:scaleX(1)}
+  .drift{transform:none !important}
+}
+</style>
+</head>
+<body>
+
+<div class="sky" aria-hidden="true">
+  <div class="wash wash-near"></div>
+  <div class="wash wash-far"></div>
+</div>
+<canvas class="sky-canvas" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="wordmark" href="#top"><b>◦</b>&nbsp; Parallax</a>
+  <p class="readout" id="readout">
+    Light-travel time <span class="readout-val" id="readout-val">0 seconds</span>
+  </p>
+</header>
+
+<nav class="rail" id="rail" aria-label="Distance ladder">
+  <a class="rung-link" href="#baseline">2 AU <span>8m 19s</span></a>
+  <a class="rung-link" href="#nearest">Parallax <span>4.2 yr</span></a>
+  <a class="rung-link" href="#cepheids">Cepheids <span>2.5 Myr</span></a>
+  <a class="rung-link" href="#supernovae">Type Ia <span>1 Gyr</span></a>
+  <a class="rung-link" href="#redshift">Redshift <span>13.8 Gyr</span></a>
+</nav>
+
+<main class="page" id="top">
+
+  <!-- ==========================================================
+       HERO
+       ========================================================== -->
+  <section class="rung hero" id="hero" data-lt="0" aria-labelledby="title">
+    <div class="rung-inner">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow reveal">Measuring the universe</p>
+          <h1 class="title reveal reveal-d1" id="title">Parallax</h1>
+          <p class="hero-sub lede reveal reveal-d2">
+            Hold up a finger. Close one eye, then the other. It jumps — and how far it
+            jumps tells you how far away it is. Every distance below was measured that
+            way, or by something built on top of it.
+          </p>
+          <a class="scroll-cue reveal reveal-d3" href="#baseline"><i></i> Begin at Earth</a>
+        </div>
+
+        <!-- SIGNATURE: the parallax instrument -->
+        <div class="instrument reveal reveal-d2" id="instrument">
+          <div class="instrument-head">
+            <span>Instrument</span>
+            <span><b id="target-name">Proxima Centauri</b></span>
+          </div>
+
+          <div class="panels">
+            <div class="panel">
+              <p class="panel-tag">Plan view</p>
+              <svg viewBox="0 0 320 168" role="img" aria-label="Top-down view of Earth's orbit with sight-lines to a nearby star">
+                <!-- orbit -->
+                <ellipse cx="72" cy="88" rx="46" ry="18" fill="none" stroke="#1b2436" stroke-width="1"/>
+                <!-- baseline between the two observations -->
+                <line x1="26" y1="88" x2="118" y2="88" stroke="#7fa7c4" stroke-width="1" stroke-dasharray="2 3" opacity=".5"/>
+                <circle cx="26" cy="88" r="1.8" fill="#7fa7c4" opacity=".55"/>
+                <circle cx="118" cy="88" r="1.8" fill="#7fa7c4" opacity=".55"/>
+                <!-- sun -->
+                <circle cx="72" cy="88" r="4.5" fill="#f0a03c"/>
+                <circle cx="72" cy="88" r="11" fill="#f0a03c" opacity=".12"/>
+                <text x="72" y="120" fill="#5c6478" font-family="ui-monospace, monospace" font-size="7" letter-spacing="1.4" text-anchor="middle">SUN</text>
+                <!-- the star -->
+                <circle cx="288" cy="88" r="3.6" fill="#ede6d8"/>
+                <circle cx="288" cy="88" r="11" fill="#ede6d8" opacity=".08"/>
+                <text x="288" y="62" fill="#8b93a5" font-family="ui-monospace, monospace" font-size="7" letter-spacing="1.4" text-anchor="middle">STAR</text>
+                <!-- sight line, redrawn as Earth moves -->
+                <line id="sight-line" x1="118" y1="88" x2="288" y2="88" stroke="#f0a03c" stroke-width="1" opacity=".75"/>
+                <!-- Earth -->
+                <circle id="earth" cx="118" cy="88" r="3.4" fill="#7fa7c4"/>
+                <text x="72" y="142" fill="#5c6478" font-family="ui-monospace, monospace" font-size="6.5" letter-spacing="1.2" text-anchor="middle">1 AU ORBIT</text>
+              </svg>
+            </div>
+
+            <div class="panel">
+              <p class="panel-tag">Through the eyepiece</p>
+              <svg viewBox="0 0 200 200" role="img" aria-label="Telescope field of view in which the near star shifts against fixed background stars">
+                <defs>
+                  <clipPath id="eyepiece"><circle cx="100" cy="100" r="82"/></clipPath>
+                </defs>
+                <circle cx="100" cy="100" r="82" fill="rgba(5,7,14,.55)" stroke="#1b2436"/>
+                <g clip-path="url(#eyepiece)">
+                  <g id="bg-stars"></g>
+                  <!-- extremes of the apparent shift -->
+                  <circle cx="72" cy="100" r="4.6" fill="none" stroke="#1b2436" stroke-width="1"/>
+                  <circle cx="128" cy="100" r="4.6" fill="none" stroke="#1b2436" stroke-width="1"/>
+                  <line x1="72" y1="100" x2="128" y2="100" stroke="#1b2436" stroke-dasharray="1 4"/>
+                  <!-- the measured star -->
+                  <circle id="target-halo" cx="100" cy="100" r="11" fill="#f0a03c" opacity=".14"/>
+                  <circle id="target-star" cx="100" cy="100" r="4.2" fill="#f0a03c"/>
+                </g>
+                <!-- reticle -->
+                <line x1="100" y1="4" x2="100" y2="15" stroke="#1b2436"/>
+                <line x1="100" y1="185" x2="100" y2="196" stroke="#1b2436"/>
+                <line x1="4" y1="100" x2="15" y2="100" stroke="#1b2436"/>
+                <line x1="185" y1="100" x2="196" y2="100" stroke="#1b2436"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control-labels">
+              <span>Earth's position</span>
+              <span><b id="month-label">January</b></span>
+            </div>
+            <input class="slider" type="range" id="phase" min="0" max="359" value="0" step="1"
+                   aria-label="Earth's position in its orbit" aria-valuetext="January">
+          </div>
+
+          <div class="dials">
+            <div>
+              <p class="dial-k">Apparent offset</p>
+              <p class="dial-v is-live" id="dial-offset">+0.768″</p>
+            </div>
+            <div>
+              <p class="dial-k">Parallax angle</p>
+              <p class="dial-v">0.768″</p>
+            </div>
+            <div>
+              <p class="dial-k">Distance</p>
+              <p class="dial-v">1.302 pc</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       RUNG 1 — THE BASELINE
+       ========================================================== -->
+  <section class="rung" id="baseline" data-lt="499" aria-labelledby="baseline-h">
+    <div class="rung-inner">
+      <div class="plate">
+        <div class="copy">
+          <p class="eyebrow reveal">The baseline</p>
+          <p class="figure figure-long reveal reveal-d1" id="baseline-h">299,195,741</p>
+          <p class="figure-unit reveal reveal-d1">Kilometres · two astronomical units</p>
+          <p class="lede reveal reveal-d2">
+            Two viewpoints, six months apart. Earth in January and Earth in July are the
+            widest-set pair of eyes we have.
+          </p>
+          <p class="body reveal reveal-d2">
+            Every distance beyond the solar system starts here. Photograph a star in
+            January, photograph it again in July, and measure how far it moved against
+            the far background. <strong>The nearer the star, the larger the shift.</strong>
+            That is the whole method — the rest is arithmetic.
+          </p>
+          <p class="note reveal reveal-d3">
+            Sunlight crosses one astronomical unit in 8 minutes 19 seconds. You are always
+            seeing the Sun as it was, never as it is.
+          </p>
+        </div>
+        <div class="plate-figure reveal reveal-d2">
+          <svg viewBox="0 0 320 220" role="img" aria-label="Earth at opposite ends of its orbit, six months apart">
+            <ellipse cx="160" cy="110" rx="118" ry="44" fill="none" stroke="#1b2436"/>
+            <circle cx="160" cy="110" r="5" fill="#f0a03c"/>
+            <circle cx="160" cy="110" r="16" fill="#f0a03c" opacity=".1"/>
+            <line x1="42" y1="110" x2="278" y2="110" stroke="#7fa7c4" stroke-dasharray="3 4" opacity=".5"/>
+            <circle cx="42" cy="110" r="5.5" fill="#7fa7c4"/>
+            <circle cx="278" cy="110" r="5.5" fill="#7fa7c4" opacity=".45"/>
+            <text x="42" y="94" fill="#8b93a5" font-family="ui-monospace, monospace" font-size="8" letter-spacing="1.6" text-anchor="middle">JAN</text>
+            <text x="278" y="94" fill="#8b93a5" font-family="ui-monospace, monospace" font-size="8" letter-spacing="1.6" text-anchor="middle">JUL</text>
+            <text x="160" y="176" fill="#5c6478" font-family="ui-monospace, monospace" font-size="8" letter-spacing="2" text-anchor="middle">2 AU BASELINE</text>
+          </svg>
+          <p class="caption">Orbit to scale · bodies are not</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       RUNG 2 — TRIGONOMETRIC PARALLAX
+       ========================================================== -->
+  <section class="rung" id="nearest" data-lt="134009348" aria-labelledby="nearest-h">
+    <div class="rung-inner">
+      <div class="plate">
+        <div class="copy">
+          <p class="eyebrow reveal">Rung one · trigonometric parallax</p>
+          <p class="figure reveal reveal-d1" id="nearest-h">0.768<em>″</em></p>
+          <p class="figure-unit reveal reveal-d1">Proxima Centauri · 4.2465 light-years</p>
+          <p class="lede reveal reveal-d2">
+            The nearest star to the Sun shifts by about three quarters of an arcsecond —
+            a one-pound coin seen from five kilometres away.
+          </p>
+          <p class="body reveal reveal-d2">
+            Divide one by that angle and the answer comes out in parsecs: 1.302, or 4.2465
+            light-years. The unit was built backwards from the method — a parsec is simply
+            the distance at which a star shifts by one arcsecond.
+          </p>
+          <p class="body reveal reveal-d3">
+            <strong>Gaia has made this measurement for roughly 1.8 billion stars</strong>,
+            the best of them to twenty millionths of an arcsecond. Past a few thousand
+            light-years, though, the shift shrinks below what any instrument can trust,
+            and the ladder needs a second rung.
+          </p>
+        </div>
+        <div class="plate-figure reveal reveal-d2">
+          <svg viewBox="0 0 320 250" role="img" aria-label="The parallax triangle formed by Earth's orbit and a nearby star">
+            <line x1="60" y1="210" x2="160" y2="40" stroke="#f0a03c" opacity=".55"/>
+            <line x1="260" y1="210" x2="160" y2="40" stroke="#f0a03c" opacity=".55"/>
+            <line x1="60" y1="210" x2="260" y2="210" stroke="#7fa7c4" stroke-dasharray="3 4" opacity=".5"/>
+            <path d="M150 62 A 22 22 0 0 0 170 62" fill="none" stroke="#f0a03c" stroke-width="1"/>
+            <text x="160" y="82" fill="#f0a03c" font-family="ui-monospace, monospace" font-size="9" letter-spacing="1" text-anchor="middle">p</text>
+            <circle cx="160" cy="40" r="4.4" fill="#ede6d8"/>
+            <circle cx="160" cy="40" r="13" fill="#ede6d8" opacity=".08"/>
+            <circle cx="60" cy="210" r="4.4" fill="#7fa7c4"/>
+            <circle cx="260" cy="210" r="4.4" fill="#7fa7c4" opacity=".45"/>
+            <text x="160" y="232" fill="#5c6478" font-family="ui-monospace, monospace" font-size="8" letter-spacing="2" text-anchor="middle">d = 1 / p</text>
+          </svg>
+          <p class="caption">Angle exaggerated ~10,000×</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       RUNG 3 — CEPHEID VARIABLES
+       ========================================================== -->
+  <section class="rung" id="cepheids" data-lt="80061631200000" aria-labelledby="cepheids-h">
+    <div class="rung-inner">
+      <div class="plate">
+        <div class="copy">
+          <p class="eyebrow reveal">Rung two · Leavitt's law</p>
+          <p class="figure figure-long reveal reveal-d1" id="cepheids-h">2,537,000&nbsp;<em>ly</em></p>
+          <p class="figure-unit reveal reveal-d1">Andromeda · measured by pulsing stars</p>
+          <p class="lede reveal reveal-d2">
+            In 1912 Henrietta Leavitt noticed that some stars pulse, and the slower they
+            pulse the brighter they truly are.
+          </p>
+          <p class="body reveal reveal-d2">
+            That turns a clock into a ruler. Time the pulse and you know the star's real
+            brightness; compare it with how bright it looks from here, and the shortfall is
+            distance. <strong>Leavitt found the relation in 25 stars</strong> in the Small
+            Magellanic Cloud, working from photographic plates.
+          </p>
+          <p class="note reveal reveal-d3">
+            Delta Cephei, the star the class is named for, brightens and dims on a
+            5.37-day cycle. It has been doing so, visibly, for as long as anyone has looked.
+          </p>
+        </div>
+        <div class="plate-figure reveal reveal-d2">
+          <svg viewBox="0 0 320 220" role="img" aria-label="Light curve of a Cepheid variable star with a marker tracing its cycle">
+            <line x1="30" y1="180" x2="300" y2="180" stroke="#1b2436"/>
+            <line x1="30" y1="30" x2="30" y2="180" stroke="#1b2436"/>
+            <path id="curve" d="M30 150 C 52 60, 66 46, 90 62 C 116 80, 128 148, 165 150 C 190 152, 196 60, 220 48 C 244 36, 258 148, 295 152"
+                  fill="none" stroke="#f0a03c" stroke-width="1.5" opacity=".8"/>
+            <circle id="curve-halo" cx="30" cy="150" r="8" fill="#f0a03c" opacity=".1"/>
+            <circle id="curve-dot" cx="30" cy="150" r="4" fill="#f0a03c"/>
+            <text x="165" y="205" fill="#5c6478" font-family="ui-monospace, monospace" font-size="8" letter-spacing="2" text-anchor="middle">PERIOD 5.37 DAYS</text>
+            <text x="14" y="105" fill="#5c6478" font-family="ui-monospace, monospace" font-size="8" letter-spacing="2" text-anchor="middle" transform="rotate(-90 14 105)">BRIGHTNESS</text>
+          </svg>
+          <p class="caption">Light curve · schematic</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       RUNG 4 — TYPE Ia SUPERNOVAE
+       ========================================================== -->
+  <section class="rung" id="supernovae" data-lt="31557600000000000" aria-labelledby="supernovae-h">
+    <div class="rung-inner">
+      <div class="plate">
+        <div class="copy">
+          <p class="eyebrow reveal">Rung three · standard candles</p>
+          <p class="figure figure-long reveal reveal-d1" id="supernovae-h">1,000,000,000</p>
+          <p class="figure-unit reveal reveal-d1">Light-years · Type Ia supernovae, and further still</p>
+          <p class="lede reveal reveal-d2">
+            Cepheids fade from view around a hundred million light-years. Exploding white
+            dwarfs carry the ladder a thousand times further.
+          </p>
+          <p class="body reveal reveal-d2">
+            A white dwarf pulling matter from a companion detonates at a fixed threshold, so
+            every Type Ia peaks at close to the same true brightness — bright enough to
+            outshine its whole host galaxy for a few weeks. <strong>Same candle, different
+            distances, measurable dimming.</strong>
+          </p>
+          <p class="body reveal reveal-d3">
+            In 1998 two competing teams pushed these measurements far enough out to find
+            something nobody had ordered: the expansion is not slowing down. It is speeding up.
+          </p>
+        </div>
+        <div class="plate-figure reveal reveal-d2">
+          <svg viewBox="0 0 320 220" role="img" aria-label="A distant galaxy with a supernova flaring at its edge">
+            <g opacity=".6">
+              <ellipse cx="160" cy="110" rx="96" ry="30" fill="none" stroke="#1b2436" transform="rotate(-18 160 110)"/>
+              <ellipse cx="160" cy="110" rx="64" ry="19" fill="none" stroke="#1b2436" transform="rotate(-18 160 110)"/>
+              <ellipse cx="160" cy="110" rx="30" ry="9" fill="none" stroke="#1b2436" transform="rotate(-18 160 110)"/>
+            </g>
+            <ellipse cx="160" cy="110" rx="40" ry="13" fill="#c4552e" opacity=".16" transform="rotate(-18 160 110)"/>
+            <circle id="sn-halo" cx="228" cy="82" r="16" fill="#ede6d8" opacity="0"/>
+            <circle id="sn" cx="228" cy="82" r="3" fill="#ede6d8" opacity=".25"/>
+            <line x1="238" y1="72" x2="266" y2="48" stroke="#1b2436"/>
+            <text x="270" y="45" fill="#8b93a5" font-family="ui-monospace, monospace" font-size="7" letter-spacing="1.4">TYPE IA</text>
+          </svg>
+          <p class="caption">One star, briefly outshining billions</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       RUNG 5 — REDSHIFT
+       ========================================================== -->
+  <section class="rung" id="redshift" data-lt="435495000000000000" aria-labelledby="redshift-h">
+    <div class="rung-inner">
+      <div class="plate">
+        <div class="copy">
+          <p class="eyebrow reveal">Rung four · redshift</p>
+          <p class="figure reveal reveal-d1" id="redshift-h">13.8&nbsp;<em class="unit">billion years</em></p>
+          <p class="figure-unit reveal reveal-d1">Oldest light · horizon 46.5 billion ly</p>
+          <p class="lede reveal reveal-d2">
+            Past the candles, distance is read from colour. Expanding space stretches light
+            on its way here, so the further it has travelled, the redder it arrives.
+          </p>
+          <p class="body reveal reveal-d2">
+            Each element absorbs at fixed, known wavelengths. Find that fingerprint in a
+            distant galaxy's spectrum, measure how far it has slid toward red, and you have
+            both its speed and its distance. <strong>The oldest light we can see set out 13.8
+            billion years ago</strong>; the space it crossed has stretched to 46.5 billion
+            light-years since.
+          </p>
+          <p class="note reveal reveal-d3">
+            The two ways of measuring the expansion rate — this ladder, and the earliest
+            light — still disagree by roughly eight percent. Nobody has resolved it. That
+            gap is where the next physics is expected to be.
+          </p>
+        </div>
+        <div class="plate-figure reveal reveal-d2">
+          <div class="spectrum" id="spectrum" role="img" aria-label="Absorption lines sliding toward the red end of a spectrum">
+            <div class="spectrum-band"></div>
+          </div>
+          <div class="spectrum-scale">
+            <span>400 nm</span><span>Shift &nbsp;<b id="z-val">z = 0.00</b></span><span>700 nm</span>
+          </div>
+          <p class="caption">Absorption lines · scroll to redshift</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       CODA
+       ========================================================== -->
+  <section class="rung coda" id="coda" data-lt="435495000000000000">
+    <div class="rung-inner">
+      <div class="copy">
+        <p class="eyebrow reveal">End of the ladder</p>
+        <p class="figure reveal reveal-d1">Look&nbsp;<em>up</em></p>
+        <p class="lede reveal reveal-d2">
+          You have scrolled through 13.8 billion years of travelling light. All of it was
+          reached from one baseline, 299 million kilometres wide, and the willingness to
+          look at the same star twice.
+        </p>
+        <a class="back reveal reveal-d3" href="#top">Return to Earth</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="colophon">
+  <div>
+    <h2>Figures</h2>
+    <ul>
+      <li>Parallax &amp; distances — Gaia DR3</li>
+      <li>Leavitt's law — Leavitt &amp; Pickering, 1912</li>
+      <li>Acceleration — Riess et al. 1998, Perlmutter et al. 1999</li>
+      <li>Age &amp; horizon — Planck 2018</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Built with</h2>
+    <ul>
+      <li>Canvas starfield, depth-sorted</li>
+      <li>No frameworks, no fonts, no trackers</li>
+      <li>Reduced motion respected</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Note</h2>
+    <ul>
+      <li>Diagrams are schematic</li>
+      <li>Angles exaggerated to be visible</li>
+      <li>The numbers are real</li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+  var lerp = function (a, b, t) { return a + (b - a) * t; };
+
+  /* Small seeded PRNG so the star pattern is identical on every load. */
+  function seeded(seed) {
+    return function () {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+  }
+
+  /* ==========================================================
+     STARFIELD
+     Depth (z) drives everything: size, brightness, and how fast
+     a star slides past. Near stars sweep, far stars hold — the
+     same relation the page is about.
+     ========================================================== */
+  var canvas = document.querySelector('.sky-canvas');
+  var ctx = canvas.getContext('2d');
+  var stars = [];
+  var meteors = [];
+  var vw = 0, vh = 0, field = 0, dpr = 1;
+  var pointer = { x: 0, tx: 0 };
+
+  var PALETTE = ['#ede6d8', '#ede6d8', '#ede6d8', '#cfd8e6', '#9fbdd4', '#f0c98c'];
+
+  function buildStars() {
+    var rand = seeded(20260813);
+    var count = Math.round(clamp((vw * vh) / 1900, 260, 900));
+    field = vh * 2;
+    stars = [];
+    for (var i = 0; i < count; i++) {
+      var z = Math.pow(rand(), 1.8);           /* bias toward distant stars */
+      stars.push({
+        x: rand() * vw,
+        y: rand() * field,
+        z: z,
+        r: 0.32 + z * 1.5,
+        a: 0.2 + z * 0.62,
+        tw: rand() * Math.PI * 2,
+        c: PALETTE[Math.floor(rand() * PALETTE.length)]
+      });
+    }
+  }
+
+  function resize() {
+    vw = window.innerWidth;
+    vh = window.innerHeight;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildStars();
+    if (reduced) drawStars(0, 0);
+  }
+
+  function drawStars(scroll, t) {
+    ctx.clearRect(0, 0, vw, vh);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      var speed = 0.1 + s.z * 0.8;
+      var y = (s.y - scroll * speed) % field;
+      if (y < 0) y += field;
+      if (y < -8 || y > vh + 8) continue;
+      var x = s.x + pointer.x * s.z * 30;
+      if (x < -8) x += vw; else if (x > vw + 8) x -= vw;
+      var alpha = s.a;
+      if (!reduced && s.z > 0.55) alpha *= 0.72 + 0.28 * Math.sin(t * 0.0014 + s.tw);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = s.c;
+      ctx.beginPath();
+      ctx.arc(x, y, s.r, 0, 6.2832);
+      ctx.fill();
+      if (s.z > 0.9) {                          /* the few brightest get a halo */
+        ctx.globalAlpha = alpha * 0.12;
+        ctx.beginPath();
+        ctx.arc(x, y, s.r * 4, 0, 6.2832);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawMeteors(dt) {
+    if (meteors.length === 0 && Math.random() < 0.0016) {
+      meteors.push({
+        x: Math.random() * vw * 0.7 + vw * 0.2,
+        y: -40,
+        vx: -(90 + Math.random() * 70),
+        vy: 190 + Math.random() * 120,
+        life: 0
+      });
+    }
+    for (var i = meteors.length - 1; i >= 0; i--) {
+      var m = meteors[i];
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+      m.life += dt;
+      var fade = clamp(1 - m.life / 1.5, 0, 1);
+      var g = ctx.createLinearGradient(m.x, m.y, m.x - m.vx * 0.16, m.y - m.vy * 0.16);
+      g.addColorStop(0, 'rgba(237,230,216,' + (0.75 * fade) + ')');
+      g.addColorStop(1, 'rgba(237,230,216,0)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y);
+      ctx.lineTo(m.x - m.vx * 0.16, m.y - m.vy * 0.16);
+      ctx.stroke();
+      if (m.life > 1.5 || m.y > vh + 60) meteors.splice(i, 1);
+    }
+  }
+
+  /* ==========================================================
+     SCROLL STATE — depth tint, progress, light-travel readout
+     ========================================================== */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('[data-lt]'));
+  var railLinks = Array.prototype.slice.call(document.querySelectorAll('.rung-link'));
+  var progress = document.getElementById('progress');
+  var readoutVal = document.getElementById('readout-val');
+  var root = document.documentElement;
+  var lastReadout = '';
+
+  var YEAR = 31557600;                          /* seconds in a Julian year */
+
+  function formatLightTime(s) {
+    if (s < 1) return '0 seconds';
+    if (s < 90) return s.toFixed(1) + ' seconds';
+    if (s < 5400) {
+      var m = Math.floor(s / 60);
+      return m + 'm ' + Math.round(s - m * 60) + 's';
+    }
+    var y = s / YEAR;
+    if (y < 1) return (s / 86400).toFixed(1) + ' days';
+    if (y < 1000) return y.toFixed(2) + ' years';
+    if (y < 1e6) return (y / 1e3).toFixed(1) + ' thousand years';
+    if (y < 9.5e8) return (y / 1e6).toFixed(2) + ' million years';
+    return (y / 1e9).toFixed(2) + ' billion years';
+  }
+
+  /* Sections are decades apart, so interpolate in log space —
+     otherwise the readout would sit at zero for the whole page. */
+  function lightTimeAt(scroll) {
+    var mid = scroll;
+    var prev = sections[0], next = sections[0];
+    for (var i = 0; i < sections.length; i++) {
+      var top = sections[i].offsetTop;
+      if (top <= mid) { prev = sections[i]; next = sections[Math.min(i + 1, sections.length - 1)]; }
+    }
+    var a = parseFloat(prev.getAttribute('data-lt'));
+    var b = parseFloat(next.getAttribute('data-lt'));
+    var span = next.offsetTop - prev.offsetTop;
+    var t = span > 0 ? clamp((mid - prev.offsetTop) / span, 0, 1) : 1;
+    if (a <= 0) return b * Math.pow(t, 6);
+    return Math.pow(10, lerp(Math.log10(a), Math.log10(b || a), t));
+  }
+
+  function onScroll(scroll) {
+    var max = Math.max(document.body.scrollHeight - vh, 1);
+    var p = clamp(scroll / max, 0, 1);
+    progress.style.transform = 'scaleX(' + p + ')';
+    root.style.setProperty('--depth', p.toFixed(3));
+
+    var text = formatLightTime(lightTimeAt(scroll));
+    if (text !== lastReadout) { readoutVal.textContent = text; lastReadout = text; }
+
+    /* Rail: mark the rung whose section owns the viewport centre. */
+    var mid = scroll + vh * 0.5, active = -1;
+    for (var i = 1; i < sections.length; i++) {
+      if (sections[i].offsetTop <= mid) active = i - 1;
+    }
+    active = Math.min(active, railLinks.length - 1);
+    for (var j = 0; j < railLinks.length; j++) {
+      railLinks[j].classList.toggle('is-active', j === active);
+    }
+
+    /* Layered drift for anything opting in. */
+    if (!reduced) {
+      var drifters = document.querySelectorAll('.drift');
+      for (var k = 0; k < drifters.length; k++) {
+        var el = drifters[k];
+        var amt = parseFloat(el.getAttribute('data-drift')) || 10;
+        el.style.transform = 'translate3d(' + (pointer.x * amt).toFixed(2) + 'px,0,0)';
+      }
+    }
+
+    updateSpectrum(scroll);
+  }
+
+  /* ==========================================================
+     REDSHIFT PANEL — absorption lines slide as the section passes
+     ========================================================== */
+  var spectrum = document.getElementById('spectrum');
+  var zVal = document.getElementById('z-val');
+  var lines = [];
+  (function buildLines() {
+    var at = [0.14, 0.19, 0.31, 0.46, 0.52];    /* rest wavelengths, normalised */
+    for (var i = 0; i < at.length; i++) {
+      var el = document.createElement('div');
+      el.className = 'spectrum-line';
+      el.style.left = (at[i] * 100) + '%';
+      el.style.opacity = 0.55 + i * 0.08;
+      spectrum.appendChild(el);
+      lines.push({ el: el, rest: at[i] });
+    }
+  })();
+
+  function updateSpectrum(scroll) {
+    var sec = document.getElementById('redshift');
+    var rect = sec.getBoundingClientRect();
+    var t = clamp(1 - (rect.top + rect.height * 0.4) / vh, 0, 1);
+    var z = t * 1.6;
+    var w = spectrum.clientWidth;
+    for (var i = 0; i < lines.length; i++) {
+      var shifted = lines[i].rest * (1 + z * 0.42);
+      var dx = (shifted - lines[i].rest) * w;
+      lines[i].el.style.transform = 'translate3d(' + dx.toFixed(1) + 'px,0,0)';
+    }
+    zVal.textContent = 'z = ' + z.toFixed(2);
+  }
+
+  /* ==========================================================
+     THE INSTRUMENT
+     Walk Earth around its orbit; watch the near star shift
+     against a field that does not.
+     ========================================================== */
+  var MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+  var PARALLAX = 0.768;                          /* arcseconds, Proxima Centauri */
+  var phase = document.getElementById('phase');
+  var earth = document.getElementById('earth');
+  var sight = document.getElementById('sight-line');
+  var targetStar = document.getElementById('target-star');
+  var targetHalo = document.getElementById('target-halo');
+  var monthLabel = document.getElementById('month-label');
+  var dialOffset = document.getElementById('dial-offset');
+  var instrument = document.getElementById('instrument');
+
+  (function backgroundStars() {
+    var g = document.getElementById('bg-stars');
+    var rand = seeded(77123);
+    var svgNS = 'http://www.w3.org/2000/svg';
+    for (var i = 0; i < 46; i++) {
+      var c = document.createElementNS(svgNS, 'circle');
+      c.setAttribute('cx', (rand() * 200).toFixed(1));
+      c.setAttribute('cy', (rand() * 200).toFixed(1));
+      c.setAttribute('r', (0.5 + rand() * 1.3).toFixed(2));
+      c.setAttribute('fill', '#ede6d8');
+      c.setAttribute('opacity', (0.18 + rand() * 0.4).toFixed(2));
+      g.appendChild(c);
+    }
+  })();
+
+  function setPhase(deg) {
+    var rad = deg * Math.PI / 180;
+    var ex = 72 + 46 * Math.cos(rad);
+    var ey = 88 + 18 * Math.sin(rad);
+    earth.setAttribute('cx', ex.toFixed(2));
+    earth.setAttribute('cy', ey.toFixed(2));
+    sight.setAttribute('x1', ex.toFixed(2));
+    sight.setAttribute('y1', ey.toFixed(2));
+
+    var shift = 28 * Math.cos(rad);              /* apparent offset, exaggerated */
+    var sx = 100 + shift;
+    targetStar.setAttribute('cx', sx.toFixed(2));
+    targetHalo.setAttribute('cx', sx.toFixed(2));
+
+    var month = MONTHS[Math.floor(((deg % 360) + 360) % 360 / 30)];
+    monthLabel.textContent = month;
+    phase.setAttribute('aria-valuetext', month);
+    var arc = PARALLAX * Math.cos(rad);
+    dialOffset.textContent = (arc >= 0 ? '+' : '−') + Math.abs(arc).toFixed(3) + '″';
+  }
+
+  phase.addEventListener('input', function () { setPhase(parseFloat(phase.value)); });
+
+  /* Pointing at the instrument scrubs the orbit; the slider stays
+     authoritative for keyboard and touch. */
+  instrument.addEventListener('pointermove', function (e) {
+    if (e.pointerType !== 'mouse') return;
+    var r = instrument.getBoundingClientRect();
+    var t = clamp((e.clientX - r.left) / r.width, 0, 1);
+    var deg = Math.round(t * 359);
+    phase.value = deg;
+    setPhase(deg);
+  });
+
+  setPhase(0);
+
+  /* ==========================================================
+     SMALL AMBIENT ANIMATIONS
+     ========================================================== */
+  var curveDot = document.getElementById('curve-dot');
+  var curve = document.getElementById('curve');
+  var curveHalo = document.getElementById('curve-halo');
+  var sn = document.getElementById('sn');
+  var snHalo = document.getElementById('sn-halo');
+  var curveLen = curve.getTotalLength();
+
+  function ambient(t) {
+    /* Cepheid: the dot traces the light curve, the star pulses with it. */
+    var cyc = (t % 5400) / 5400;
+    var pt = curve.getPointAtLength(cyc * curveLen);
+    curveDot.setAttribute('cx', pt.x.toFixed(2));
+    curveDot.setAttribute('cy', pt.y.toFixed(2));
+    var bright = clamp(1 - (pt.y - 46) / 110, 0, 1);
+    curveDot.setAttribute('r', (3 + bright * 2).toFixed(2));
+    curveHalo.setAttribute('cx', pt.x.toFixed(2));
+    curveHalo.setAttribute('cy', pt.y.toFixed(2));
+    curveHalo.setAttribute('r', (6 + bright * 12).toFixed(2));
+    curveHalo.setAttribute('opacity', (0.05 + bright * 0.22).toFixed(3));
+
+    /* Supernova: a slow rise and a long decay, once every ~11 seconds. */
+    var s = (t % 11000) / 1000;
+    var amp = s < 0.45 ? s / 0.45 : Math.exp(-(s - 0.45) * 0.9);
+    if (s > 6.5) amp = 0;
+    sn.setAttribute('r', (3 + amp * 4).toFixed(2));
+    sn.setAttribute('opacity', (0.25 + amp * 0.75).toFixed(2));
+    snHalo.setAttribute('opacity', (amp * 0.3).toFixed(3));
+    snHalo.setAttribute('r', (10 + amp * 22).toFixed(2));
+  }
+
+  /* ==========================================================
+     REVEALS
+     ========================================================== */
+  if ('IntersectionObserver' in window && !reduced) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-in');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('is-in'); });
+  }
+
+  /* ==========================================================
+     LOOP
+     ========================================================== */
+  var lastT = 0, scrollY = 0, needsScroll = true, running = true;
+
+  window.addEventListener('scroll', function () { needsScroll = true; }, { passive: true });
+  window.addEventListener('resize', function () { resize(); needsScroll = true; }, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    running = !document.hidden;
+    if (running) { lastT = 0; requestAnimationFrame(frame); }
+  });
+  if (!reduced) {
+    window.addEventListener('pointermove', function (e) {
+      pointer.tx = (e.clientX / window.innerWidth - 0.5) * 2;
+    }, { passive: true });
+  }
+
+  function frame(t) {
+    if (!running) return;
+    var dt = lastT ? Math.min((t - lastT) / 1000, 0.05) : 0.016;
+    lastT = t;
+
+    pointer.x += (pointer.tx - pointer.x) * 0.045;
+
+    scrollY = window.pageYOffset || document.documentElement.scrollTop;
+    if (needsScroll || Math.abs(pointer.tx - pointer.x) > 0.001) {
+      onScroll(scrollY);
+      needsScroll = false;
+    }
+
+    drawStars(scrollY, t);
+    drawMeteors(dt);
+    ambient(t);
+
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  onScroll(window.pageYOffset || 0);
+
+  if (reduced) {
+    drawStars(0, 0);
+    window.addEventListener('scroll', function () {
+      onScroll(window.pageYOffset || document.documentElement.scrollTop);
+    }, { passive: true });
+  } else {
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>
